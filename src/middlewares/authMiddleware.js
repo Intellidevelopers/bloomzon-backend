@@ -63,12 +63,13 @@ const protect = async (req, res, next) => {
     console.log('✅ User authenticated:', user.email);
     
     // Add user to request object
-    req.user = {
-      id: user._id,
-      email: user.email,
-      role: user.role,
-      firstname: user.firstname,
-      lastname: user.lastname
+   req.user = {
+        _id: user._id,        // Add this line
+        id: user._id,         // Keep this for compatibility
+        email: user.email,
+        role: user.role,
+        firstname: user.firstname,
+        lastname: user.lastname
     };
 
     console.log('========== AUTH SUCCESS ==========\n');

@@ -1,0 +1,525 @@
+const mongoose = require('mongoose');
+
+// ============================================
+// PRODUCT SCHEMA
+// ============================================
+
+const productSchema = new mongoose.Schema({
+  productId: {
+    type: String,
+    required: [true, 'Product ID is required'],
+    unique: true,
+    index: true,
+    trim: true
+  },
+  
+  // Step 1: Product Details
+  productCategory: {
+    type: String,
+    required: [true, 'Product category is required'],
+    index: true
+  },
+  productSubCategory: {
+    type: String,
+    required: [true, 'Product sub-category is required']
+  },
+  productIdType: {
+    type: String,
+    enum: ['UPC', 'EAN', 'ISBN', 'GTIN', 'ASIN']
+  },
+  productName: {
+    type: String,
+    required: [true, 'Product name is required'],
+    trim: true,
+    index: true
+  },
+  brandName: {
+    type: String,
+    trim: true
+  },
+  noBrand: {
+    type: Boolean,
+    default: false
+  },
+  modelNumber: {
+    type: String,
+    trim: true
+  },
+  closureType: {
+    type: String
+  },
+  outerMaterialType: {
+    type: String
+  },
+  style: {
+    type: String
+  },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Unisex', 'Rather not to say']
+  },
+  numberOfItems: {
+    type: Number,
+    min: [1, 'Number of items must be at least 1'],
+    default: 1
+  },
+  strapType: {
+    type: String
+  },
+  bookingDate: {
+    type: Date
+  },
+  shippingCountry: {
+    type: String
+  },
+  
+  // Step 2: Variation Types
+  variationTypes: [{
+    type: String,
+    enum: ['Color', 'Size', 'Edition']
+  }],
+  colors: [{
+    type: String,
+    trim: true
+  }],
+  sizes: [{
+    type: String,
+    trim: true
+  }],
+  editions: [{
+    type: String,
+    trim: true
+  }],
+  
+  // Step 4: Offers
+  sellerSku: {
+    type: String,
+    required: [true, 'Seller SKU is required'],
+    unique: true,
+    trim: true,
+    index: true
+  },
+  pricing: {
+    yourPrice: {
+      type: Number,
+      required: [true, 'Your price is required'],
+      min: [0, 'Price cannot be negative']
+    },
+    listPrice: {
+      type: Number,
+      min: [0, 'List price cannot be negative']
+    },
+    maximumRetailPrice: {
+      type: Number,
+      min: [0, 'Maximum retail price cannot be negative']
+    }
+  },
+  quantity: {
+    type: Number,
+    required: [true, 'Quantity is required'],
+    min: [0, 'Quantity cannot be negative'],
+    default: 0
+  },
+  condition: {
+    type: String,
+    required: [true, 'Product condition is required'],
+    enum: ['New', 'Used - Like New', 'Used - Good', 'Used - Acceptable', 'Refurbished', 'Open Box']
+  },
+  countryOfRegion: {
+    type: String
+  },
+  fulfillmentChannel: {
+    type: String,
+    required: [true, 'Fulfillment channel is required'],
+    enum: ['Bloomzon Ship', 'Bloomzon Pickup', 'Self Ship']
+  },
+  
+  // Step 6: Description
+  description: {
+    type: String,
+    required: [true, 'Product description is required'],
+    trim: true
+  },
+  bulletPoints: [{
+    type: String,
+    trim: true
+  }],
+  
+  // Step 7: Keywords
+  keywords: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  
+  // Product Status
+  status: {
+    type: String,
+    enum: ['draft', 'active', 'inactive', 'out_of_stock'],
+    default: 'draft',
+    index: true
+  },
+  currentStep: {
+    type: Number,
+    min: 1,
+    max: 7,
+    default: 1
+  },
+  
+  // Seller Information
+  sellerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  
+  // Analytics
+  views: {
+    type: Number,
+    default: 0
+  },
+  sales: {
+    type: Number,
+    default: 0
+  },
+  
+  // Timestamps
+  completedAt: {
+    type: Date
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Indexes for better query performance
+productSchema.index({ productName: 'text', description: 'text', keywords: 'text' });
+productSchema.index({ status: 1, createdAt: -1 });
+productSchema.index({ sellerId: 1, status: 1 });
+productSchema.index({ productCategory: 1, productSubCategory: 1 });
+
+// Pre-save middleware to generate product ID (FIXED)
+productSchema.pre('save', function(next) {
+  if (!this.productId) {
+    this.productId = `BL${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+  }
+  next(); // IMPORTANT: Always call next()
+});
+
+// ============================================
+// PRODUCT VARIATION SCHEMA
+// ============================================
+
+const productVariationSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+    required: [true, 'Product ID is required'],
+    index: true
+  },
+  
+  color: {
+    type: String,
+    trim: true
+  },
+  size: {
+    type: String,
+    trim: true
+  },
+  edition: {
+    type: String,
+    trim: true
+  },
+  
+  sku: {
+    type: String,
+    required: [true, 'SKU is required'],
+    unique: true,
+    trim: true,
+    index: true
+  },
+  productIdValue: {
+    type: String,
+    trim: true
+  },
+  productIdType: {
+    type: String,
+    enum: ['UPC', 'EAN', 'ISBN', 'GTIN', 'ASIN']
+  },
+  
+  price: {
+    type: Number,
+    min: [0, 'Price cannot be negative']
+  },
+  quantity: {
+    type: Number,
+    min: [0, 'Quantity cannot be negative'],
+    default: 0
+  },
+  condition: {
+    type: String,
+    enum: ['New', 'Used - Like New', 'Used - Good', 'Used - Acceptable', 'Refurbished', 'Open Box']
+  },
+  
+  image: {
+    type: String
+  },
+  
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true
+});
+
+// Compound index for variation lookup
+productVariationSchema.index({ productId: 1, color: 1, size: 1, edition: 1 });
+
+// Pre-save middleware to auto-generate SKU (FIXED)
+productVariationSchema.pre('save', async function(next) {
+  try {
+    if (!this.sku) {
+      const Product = mongoose.model('Product');
+      const product = await Product.findById(this.productId);
+      if (product) {
+        const parts = [product.productId];
+        if (this.color) parts.push(this.color);
+        if (this.size) parts.push(this.size);
+        if (this.edition) parts.push(this.edition);
+        this.sku = parts.join('-').toUpperCase().replace(/\s/g, '-');
+      }
+    }
+    next(); // IMPORTANT: Always call next()
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// PRODUCT IMAGE SCHEMA
+// ============================================
+
+const productImageSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+    required: [true, 'Product ID is required'],
+    index: true
+  },
+  
+  url: {
+    type: String,
+    required: [true, 'Image URL is required']
+  },
+  filename: {
+    type: String,
+    required: [true, 'Filename is required']
+  },
+  originalName: {
+    type: String
+  },
+  size: {
+    type: Number
+  },
+  mimeType: {
+    type: String
+  },
+  isPrimary: {
+    type: Boolean,
+    default: false
+  },
+  order: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+productImageSchema.index({ productId: 1, isPrimary: 1 });
+
+// Pre-save middleware (FIXED)
+productImageSchema.pre('save', async function(next) {
+  try {
+    if (this.isPrimary) {
+      await mongoose.model('ProductImage').updateMany(
+        { productId: this.productId, _id: { $ne: this._id } },
+        { isPrimary: false }
+      );
+    }
+    next(); // IMPORTANT: Always call next()
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// CATEGORY SCHEMA
+// ============================================
+
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Category name is required'],
+    unique: true,
+    trim: true
+  },
+  slug: {
+    type: String,
+    required: [true, 'Category slug is required'],
+    unique: true,
+    lowercase: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  parentCategory: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    default: null
+  },
+  image: {
+    type: String
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  order: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+// Pre-save middleware (FIXED)
+categorySchema.pre('save', function(next) {
+  if (!this.slug) {
+    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  }
+  next(); // IMPORTANT: Always call next()
+});
+
+// ============================================
+// SUBCATEGORY SCHEMA
+// ============================================
+
+const subcategorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Subcategory name is required'],
+    trim: true
+  },
+  slug: {
+    type: String,
+    required: [true, 'Subcategory slug is required'],
+    lowercase: true
+  },
+  categoryId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: [true, 'Category ID is required'],
+    index: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  order: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+subcategorySchema.index({ categoryId: 1, slug: 1 }, { unique: true });
+
+// Pre-save middleware (FIXED)
+subcategorySchema.pre('save', function(next) {
+  if (!this.slug) {
+    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  }
+  next(); // IMPORTANT: Always call next()
+});
+
+// ============================================
+// DROPDOWN DATA SCHEMA
+// ============================================
+
+const dropdownDataSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    required: [true, 'Dropdown type is required'],
+    enum: [
+      'productIdType',
+      'condition',
+      'closureType',
+      'outerMaterial',
+      'style',
+      'gender',
+      'strapType',
+      'country',
+      'fulfillmentChannel'
+    ],
+    index: true
+  },
+  name: {
+    type: String,
+    required: [true, 'Name is required'],
+    trim: true
+  },
+  value: {
+    type: String,
+    trim: true
+  },
+  code: {
+    type: String,
+    trim: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  order: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+dropdownDataSchema.index({ type: 1, name: 1 }, { unique: true });
+
+// ============================================
+// EXPORT MODELS
+// ============================================
+
+const Product = mongoose.model('Product', productSchema);
+const ProductVariation = mongoose.model('ProductVariation', productVariationSchema);
+const ProductImage = mongoose.model('ProductImage', productImageSchema);
+const Category = mongoose.model('Category', categorySchema);
+const Subcategory = mongoose.model('Subcategory', subcategorySchema);
+const DropdownData = mongoose.model('DropdownData', dropdownDataSchema);
+
+module.exports = {
+  Product,
+  ProductVariation,
+  ProductImage,
+  Category,
+  Subcategory,
+  DropdownData
+};
