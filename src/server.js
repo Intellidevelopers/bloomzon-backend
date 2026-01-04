@@ -9,13 +9,13 @@ const connectDB = require('./config/database');
 // Load environment variables
 dotenv.config();
 
-// Initialize express app
+// Initialize app
 const app = express();
 
-// Connect to MongoDB
+// Connect DB
 connectDB();
 
-// Import routes
+// Routes
 const authRoutes = require('./routes/authRoutes');
 const countryRoutes = require('./routes/countryRoutes');
 const errorHandler = require('./middlewares/errorHandler');
@@ -23,17 +23,14 @@ const errorHandler = require('./middlewares/errorHandler');
 /* ---------------- Security ---------------- */
 app.use(helmet());
 
-/* ---------------- CORS (PUBLIC ACCESS) ---------------- */
+/* ---------------- CORS (PUBLIC API) ---------------- */
 app.use(
   cors({
-    origin: '*', // ✅ Allow ALL origins
+    origin: '*', // Allow all origins
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-
-// Handle preflight requests
-app.options('*', cors());
 
 /* ---------------- Body Parsing ---------------- */
 app.use(express.json());
@@ -50,15 +47,14 @@ if (process.env.NODE_ENV === 'development') {
 const limiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: {
-    success: false,
-    message: 'Too many requests. Please try again later.',
-  },
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many requests, please try again later.',
+  },
 });
 
-// Apply rate limiter ONLY to API routes
 app.use('/api', limiter);
 
 /* ---------------- Routes ---------------- */
@@ -75,7 +71,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-/* ---------------- 404 Handler ---------------- */
+/* ---------------- 404 ---------------- */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -90,8 +86,8 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-  console.log(`📍 API endpoint: http://localhost:${PORT}/api/v1`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 API: http://localhost:${PORT}/api/v1`);
 });
 
 /* ---------------- Process Safety ---------------- */
