@@ -17,79 +17,86 @@ connectDB();
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
-const errorHandler = require('./middlewares/errorHandler');
 const countryRoutes = require('./routes/countryRoutes');
+const errorHandler = require('./middlewares/errorHandler');
 
-
-// Security middleware
+/* ---------------- Security ---------------- */
 app.use(helmet());
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+/* ---------------- CORS (PUBLIC ACCESS) ---------------- */
+app.use(
+  cors({
+    origin: '*', // ✅ Allow ALL origins
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
-// Body parser middleware
+// Handle preflight requests
+app.options('*', cors());
+
+/* ---------------- Body Parsing ---------------- */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
+/* ---------------- Logging ---------------- */
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));
 }
 
-// Rate limiting
+/* ---------------- Rate Limiting ---------------- */
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: 'Too many requests from this IP, please try again later.',
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  message: {
+    success: false,
+    message: 'Too many requests. Please try again later.',
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-app.use('/api/', limiter);
+// Apply rate limiter ONLY to API routes
+app.use('/api', limiter);
+
+/* ---------------- Routes ---------------- */
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/countries', countryRoutes);
-// Health check route
+
+/* ---------------- Health Check ---------------- */
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    success: true, 
+  res.status(200).json({
+    success: true,
     message: 'Server is running',
     database: 'MongoDB',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-// API Routes
-app.use('/api/v1/auth', authRoutes);
-
-// 404 handler - MUST be after all routes
-app.use((req, res, next) => {
+/* ---------------- 404 Handler ---------------- */
+app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    message: 'Route not found',
   });
 });
 
-// Error handling middleware - MUST be last
+/* ---------------- Error Handler ---------------- */
 app.use(errorHandler);
 
-// Server configuration
+/* ---------------- Server ---------------- */
 const PORT = process.env.PORT || 5000;
 
-// Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   console.log(`📍 API endpoint: http://localhost:${PORT}/api/v1`);
-  console.log(`🗄️ Database: MongoDB`);
 });
 
-// Handle unhandled promise rejections
+/* ---------------- Process Safety ---------------- */
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Promise Rejection:', err);
-  // Close server & exit process
   process.exit(1);
 });
 
