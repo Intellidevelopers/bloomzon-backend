@@ -210,15 +210,15 @@ productSchema.index({ sellerId: 1, status: 1 });
 productSchema.index({ productCategory: 1, productSubCategory: 1 });
 
 // Pre-save middleware to generate product ID
-productSchema.pre('save', async function (next) {
+productSchema.pre('save', function () {
   if (this.isNew && !this.productId) {
     this.productId = `BL${Math.random()
       .toString(36)
       .substring(2, 10)
       .toUpperCase()}`;
   }
-  next();
 });
+
 
 // ============================================
 // PRODUCT VARIATION SCHEMA
@@ -292,26 +292,22 @@ const productVariationSchema = new mongoose.Schema({
 productVariationSchema.index({ productId: 1, color: 1, size: 1, edition: 1 });
 
 // Pre-save middleware to auto-generate SKU
-productVariationSchema.pre('save', async function (next) {
+productVariationSchema.pre('save', async function () {
   if (this.isNew && !this.sku) {
-    try {
-      const Product = mongoose.model('Product');
-      const product = await Product.findById(this.productId);
+    const Product = mongoose.model('Product');
+    const product = await Product.findById(this.productId);
 
-      if (product) {
-        const parts = [product.productId];
-        if (this.color) parts.push(this.color);
-        if (this.size) parts.push(this.size);
-        if (this.edition) parts.push(this.edition);
+    if (product) {
+      const parts = [product.productId];
+      if (this.color) parts.push(this.color);
+      if (this.size) parts.push(this.size);
+      if (this.edition) parts.push(this.edition);
 
-        this.sku = parts.join('-').toUpperCase().replace(/\s/g, '-');
-      }
-    } catch (error) {
-      return next(error);
+      this.sku = parts.join('-').toUpperCase().replace(/\s/g, '-');
     }
   }
-  next();
 });
+
 
 // ============================================
 // PRODUCT IMAGE SCHEMA (UPDATED FOR CLOUDINARY)
@@ -369,23 +365,15 @@ productImageSchema.index({ productId: 1, isPrimary: 1 });
 productImageSchema.index({ cloudinaryId: 1 }, { unique: true });
 
 // Pre-save middleware to ensure only one primary image per product
-productImageSchema.pre('save', async function (next) {
-  if (!this.isPrimary) return next();
+productImageSchema.pre('save', async function () {
+  if (!this.isPrimary) return;
 
-  try {
-    // Set all other images for this product to non-primary
-    await mongoose.model('ProductImage').updateMany(
-      { 
-        productId: this.productId, 
-        _id: { $ne: this._id } 
-      },
-      { isPrimary: false }
-    );
-    next();
-  } catch (error) {
-    next(error);
-  }
+  await mongoose.model('ProductImage').updateMany(
+    { productId: this.productId, _id: { $ne: this._id } },
+    { isPrimary: false }
+  );
 });
+
 
 // ============================================
 // CATEGORY SCHEMA
