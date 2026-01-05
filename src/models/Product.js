@@ -72,6 +72,15 @@ const productSchema = new mongoose.Schema({
   shippingCountry: {
     type: String
   },
+    url: {
+    type: String,
+    required: true
+  },
+  cloudinaryId: {
+    type: String,
+    required: true,
+    index: true
+  },
   
   // Step 2: Variation Types
   variationTypes: [{

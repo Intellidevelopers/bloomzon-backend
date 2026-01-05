@@ -1,3 +1,4 @@
+// controllers/productController.js
 const {
   Product,
   ProductVariation,
@@ -8,6 +9,7 @@ const {
 } = require('../models/Product');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
+const { deleteFromCloudinary, getPublicIdFromUrl } = require('../config/cloudinary');
 
 // ============================================
 // DROPDOWN DATA CONTROLLERS
@@ -116,8 +118,6 @@ const saveProductDetails = asyncHandler(async (req, res, next) => {
   });
 });
 
-
-
 const saveVariationTypes = asyncHandler(async (req, res, next) => {
   const { productId, variationTypes, colors, sizes, editions } = req.body;
   if (!productId) return next(new ErrorResponse('Product ID is required', 400));
@@ -142,8 +142,6 @@ const saveVariationTypes = asyncHandler(async (req, res, next) => {
   });
 });
 
-
-
 const saveProductVariations = asyncHandler(async (req, res, next) => {
   const { productId, variations } = req.body;
   const parsedVariations = typeof variations === 'string' ? JSON.parse(variations) : variations;
@@ -155,43 +153,52 @@ const saveProductVariations = asyncHandler(async (req, res, next) => {
   const product = await Product.findOne({ _id: productId, sellerId: req.user._id });
   if (!product) return next(new ErrorResponse('Product not found', 404));
 
-  const uploadedFiles = req.files || [];
+  // Delete old variations and their Cloudinary images
+  const oldVariations = await ProductVariation.find({ productId: product._id });
+  for (const variation of oldVariations) {
+    if (variation.image) {
+      const publicId = getPublicIdFromUrl(variation.image);
+      if (publicId) {
+        await deleteFromCloudinary(publicId);
+      }
+    }
+  }
   await ProductVariation.deleteMany({ productId: product._id });
 
-const variationDocs = parsedVariations.map((variation, index) => {
-  const imageFile = req.files?.[index];
+  const variationDocs = parsedVariations.map((variation, index) => {
+    const imageFile = req.files?.[index];
 
-  return {
-    productId: product._id,
-    color: variation.color,
-    size: variation.size,
-    edition: variation.edition,
-    sku:
-      variation.sku ||
-      `${product.productId}-${variation.color || ''}-${variation.size || ''}`
+    return {
+      productId: product._id,
+      color: variation.color,
+      size: variation.size,
+      edition: variation.edition,
+      sku: variation.sku || `${product.productId}-${variation.color || ''}-${variation.size || ''}`
         .toUpperCase()
         .replace(/\s/g, '-'),
-
-    productIdValue: variation.productIdValue || variation.productId,
-    productIdType: variation.productIdType,
-    price: variation.price ? Number(variation.price) : null,
-    quantity: variation.quantity ? Number(variation.quantity) : 0,
-    condition: variation.condition,
-
-    image: imageFile
-      ? `/uploads/products/${imageFile.filename}`
-      : null,
-  };
-});
-
+      productIdValue: variation.productIdValue || variation.productId,
+      productIdType: variation.productIdType,
+      price: variation.price ? Number(variation.price) : null,
+      quantity: variation.quantity ? Number(variation.quantity) : 0,
+      condition: variation.condition,
+      // Cloudinary stores the full URL in req.file.path
+      image: imageFile ? imageFile.path : null,
+    };
+  });
 
   const createdVariations = await ProductVariation.insertMany(variationDocs);
   product.currentStep = 3;
   await product.save();
 
   res.status(200).json({
-    success: true, message: 'Product variations saved successfully',
-    data: { productId: product._id, variations: createdVariations, totalVariations: createdVariations.length, currentStep: product.currentStep }
+    success: true, 
+    message: 'Product variations saved successfully',
+    data: { 
+      productId: product._id, 
+      variations: createdVariations, 
+      totalVariations: createdVariations.length, 
+      currentStep: product.currentStep 
+    }
   });
 });
 
@@ -226,10 +233,16 @@ const saveProductOffers = asyncHandler(async (req, res, next) => {
   await product.save();
 
   res.status(200).json({
-    success: true, message: 'Product offers saved successfully',
+    success: true, 
+    message: 'Product offers saved successfully',
     data: {
-      productId: product._id, sellerSku: product.sellerSku, pricing: product.pricing,
-      quantity: product.quantity, condition: product.condition, fulfillmentChannel: product.fulfillmentChannel, currentStep: product.currentStep
+      productId: product._id, 
+      sellerSku: product.sellerSku, 
+      pricing: product.pricing,
+      quantity: product.quantity, 
+      condition: product.condition, 
+      fulfillmentChannel: product.fulfillmentChannel, 
+      currentStep: product.currentStep
     }
   });
 });
@@ -242,11 +255,25 @@ const uploadProductGallery = asyncHandler(async (req, res, next) => {
   const product = await Product.findOne({ _id: productId, sellerId: req.user._id });
   if (!product) return next(new ErrorResponse('Product not found', 404));
 
+  // Delete old images from Cloudinary
+  const oldImages = await ProductImage.find({ productId: product._id });
+  for (const image of oldImages) {
+    if (image.cloudinaryId) {
+      await deleteFromCloudinary(image.cloudinaryId);
+    }
+  }
   await ProductImage.deleteMany({ productId: product._id });
 
+  // Save new images with Cloudinary URLs
   const imageDocs = req.files.map((file, index) => ({
-    productId: product._id, url: `/uploads/products/${file.filename}`, filename: file.filename,
-    originalName: file.originalname, size: file.size, mimeType: file.mimetype, isPrimary: index === 0, order: index
+    productId: product._id,
+    url: file.path, // Cloudinary URL
+    cloudinaryId: file.filename, // Cloudinary public_id
+    originalName: file.originalname,
+    size: file.size,
+    mimeType: file.mimetype,
+    isPrimary: index === 0,
+    order: index
   }));
 
   const createdImages = await ProductImage.insertMany(imageDocs);
@@ -254,8 +281,14 @@ const uploadProductGallery = asyncHandler(async (req, res, next) => {
   await product.save();
 
   res.status(200).json({
-    success: true, message: 'Product images uploaded successfully',
-    data: { productId: product._id, images: createdImages, totalImages: createdImages.length, currentStep: product.currentStep }
+    success: true, 
+    message: 'Product images uploaded successfully',
+    data: { 
+      productId: product._id, 
+      images: createdImages, 
+      totalImages: createdImages.length, 
+      currentStep: product.currentStep 
+    }
   });
 });
 
@@ -273,8 +306,14 @@ const saveProductDescription = asyncHandler(async (req, res, next) => {
   await product.save();
 
   res.status(200).json({
-    success: true, message: 'Product description saved successfully',
-    data: { productId: product._id, description: product.description, bulletPoints: product.bulletPoints, currentStep: product.currentStep }
+    success: true, 
+    message: 'Product description saved successfully',
+    data: { 
+      productId: product._id, 
+      description: product.description, 
+      bulletPoints: product.bulletPoints, 
+      currentStep: product.currentStep 
+    }
   });
 });
 
@@ -293,17 +332,26 @@ const saveProductKeywords = asyncHandler(async (req, res, next) => {
   await product.save();
 
   res.status(200).json({
-    success: true, message: 'Product created successfully!',
-    data: { productId: product._id, keywords: product.keywords, status: product.status, currentStep: product.currentStep, completedAt: product.completedAt }
+    success: true, 
+    message: 'Product created successfully!',
+    data: { 
+      productId: product._id, 
+      keywords: product.keywords, 
+      status: product.status, 
+      currentStep: product.currentStep, 
+      completedAt: product.completedAt 
+    }
   });
 });
 
 const completeProductCreation = asyncHandler(async (req, res, next) => {
   const productData = JSON.parse(req.body.productData || '{}');
-  const { productCategory, productSubCategory, productName, brandName, noBrand, modelNumber, closureType, outerMaterialType,
+  const { 
+    productCategory, productSubCategory, productName, brandName, noBrand, modelNumber, closureType, outerMaterialType,
     style, gender, numberOfItems, strapType, bookingDate, shippingCountry, productIdType, variationTypes, colors, sizes,
     editions, variations, sellerSku, yourPrice, listPrice, quantity, condition, countryOfRegion, maximumRetailPrice,
-    fulfillmentChannel, description, bulletPoints, keywords } = productData;
+    fulfillmentChannel, description, bulletPoints, keywords 
+  } = productData;
 
   if (!productCategory || !productSubCategory || !productName || !sellerSku || !yourPrice || !quantity || !condition || !fulfillmentChannel || !description) {
     return next(new ErrorResponse('Missing required fields', 400));
@@ -316,34 +364,51 @@ const completeProductCreation = asyncHandler(async (req, res, next) => {
     bookingDate, shippingCountry, variationTypes: variationTypes || [], colors: colors || [], sizes: sizes || [],
     editions: editions || [], sellerSku,
     pricing: {
-      yourPrice: parseFloat(yourPrice), listPrice: listPrice ? parseFloat(listPrice) : null,
+      yourPrice: parseFloat(yourPrice), 
+      listPrice: listPrice ? parseFloat(listPrice) : null,
       maximumRetailPrice: maximumRetailPrice ? parseFloat(maximumRetailPrice) : null
     },
     quantity: parseInt(quantity), condition, countryOfRegion, fulfillmentChannel, description, bulletPoints: bulletPoints || [],
     keywords: keywords || [], sellerId: req.user._id, status: 'active', currentStep: 7, completedAt: new Date()
   });
 
+  // Handle Cloudinary image uploads
   if (req.files && req.files.length > 0) {
     const imageDocs = req.files.map((file, index) => ({
-      productId: product._id, url: `/uploads/products/${file.filename}`, filename: file.filename,
-      originalName: file.originalname, size: file.size, mimeType: file.mimetype, isPrimary: index === 0, order: index
+      productId: product._id,
+      url: file.path, // Cloudinary URL
+      cloudinaryId: file.filename, // Cloudinary public_id
+      originalName: file.originalname,
+      size: file.size,
+      mimeType: file.mimetype,
+      isPrimary: index === 0,
+      order: index
     }));
     await ProductImage.insertMany(imageDocs);
   }
 
   if (variations && Array.isArray(variations) && variations.length > 0) {
     const variationDocs = variations.map(variation => ({
-      productId: product._id, color: variation.color, size: variation.size, edition: variation.edition,
+      productId: product._id, 
+      color: variation.color, 
+      size: variation.size, 
+      edition: variation.edition,
       sku: variation.sku || `${productId}-${variation.color || ''}-${variation.size || ''}`.toUpperCase().replace(/\s/g, '-'),
-      productIdValue: variation.productIdValue, productIdType: variation.productIdType,
+      productIdValue: variation.productIdValue, 
+      productIdType: variation.productIdType,
       price: variation.price ? parseFloat(variation.price) : null,
       quantity: variation.quantity ? parseInt(variation.quantity) : 0,
-      condition: variation.condition, image: variation.image
+      condition: variation.condition, 
+      image: variation.image
     }));
     await ProductVariation.insertMany(variationDocs);
   }
 
-  res.status(201).json({ success: true, message: 'Product created successfully!', data: product });
+  res.status(201).json({ 
+    success: true, 
+    message: 'Product created successfully!', 
+    data: product 
+  });
 });
 
 const getAllProducts = asyncHandler(async (req, res, next) => {
@@ -376,8 +441,12 @@ const getAllProducts = asyncHandler(async (req, res, next) => {
     data: {
       products,
       pagination: {
-        currentPage: pageNum, totalPages: Math.ceil(total / limitNum), totalProducts: total,
-        limit: limitNum, hasNext: pageNum < Math.ceil(total / limitNum), hasPrev: pageNum > 1
+        currentPage: pageNum, 
+        totalPages: Math.ceil(total / limitNum), 
+        totalProducts: total,
+        limit: limitNum, 
+        hasNext: pageNum < Math.ceil(total / limitNum), 
+        hasPrev: pageNum > 1
       }
     }
   });
@@ -391,7 +460,10 @@ const getProductById = asyncHandler(async (req, res, next) => {
   const images = await ProductImage.find({ productId: product._id }).sort({ order: 1 }).lean();
   await Product.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
 
-  res.status(200).json({ success: true, data: { ...product, variations, images } });
+  res.status(200).json({ 
+    success: true, 
+    data: { ...product, variations, images } 
+  });
 });
 
 const updateProduct = asyncHandler(async (req, res, next) => {
@@ -399,29 +471,65 @@ const updateProduct = asyncHandler(async (req, res, next) => {
   if (!product) return next(new ErrorResponse('Product not found', 404));
 
   const allowedFields = ['productName', 'brandName', 'modelNumber', 'description', 'bulletPoints', 'keywords', 'quantity', 'pricing', 'status'];
-  Object.keys(req.body).forEach(key => { if (allowedFields.includes(key)) product[key] = req.body[key]; });
+  Object.keys(req.body).forEach(key => { 
+    if (allowedFields.includes(key)) product[key] = req.body[key]; 
+  });
 
+  // Handle new Cloudinary image uploads
   if (req.files && req.files.length > 0) {
     const imageDocs = req.files.map((file, index) => ({
-      productId: product._id, url: `/uploads/products/${file.filename}`, filename: file.filename,
-      originalName: file.originalname, size: file.size, mimeType: file.mimetype, isPrimary: index === 0, order: index
+      productId: product._id,
+      url: file.path, // Cloudinary URL
+      cloudinaryId: file.filename, // Cloudinary public_id
+      originalName: file.originalname,
+      size: file.size,
+      mimeType: file.mimetype,
+      isPrimary: index === 0,
+      order: index
     }));
     await ProductImage.insertMany(imageDocs);
   }
 
   await product.save();
-  res.status(200).json({ success: true, message: 'Product updated successfully', data: product });
+  res.status(200).json({ 
+    success: true, 
+    message: 'Product updated successfully', 
+    data: product 
+  });
 });
 
 const deleteProduct = asyncHandler(async (req, res, next) => {
   const product = await Product.findOne({ _id: req.params.id, sellerId: req.user._id });
   if (!product) return next(new ErrorResponse('Product not found', 404));
 
+  // Delete variations and their Cloudinary images
+  const variations = await ProductVariation.find({ productId: product._id });
+  for (const variation of variations) {
+    if (variation.image) {
+      const publicId = getPublicIdFromUrl(variation.image);
+      if (publicId) {
+        await deleteFromCloudinary(publicId);
+      }
+    }
+  }
   await ProductVariation.deleteMany({ productId: product._id });
+
+  // Delete product images from Cloudinary
+  const images = await ProductImage.find({ productId: product._id });
+  for (const image of images) {
+    if (image.cloudinaryId) {
+      await deleteFromCloudinary(image.cloudinaryId);
+    }
+  }
   await ProductImage.deleteMany({ productId: product._id });
+
   await product.deleteOne();
 
-  res.status(200).json({ success: true, message: 'Product deleted successfully', data: {} });
+  res.status(200).json({ 
+    success: true, 
+    message: 'Product deleted successfully', 
+    data: {} 
+  });
 });
 
 const updateProductStatus = asyncHandler(async (req, res, next) => {
@@ -436,7 +544,11 @@ const updateProductStatus = asyncHandler(async (req, res, next) => {
   product.status = status;
   await product.save();
 
-  res.status(200).json({ success: true, message: `Product status updated to ${status}`, data: { id: product._id, status: product.status } });
+  res.status(200).json({ 
+    success: true, 
+    message: `Product status updated to ${status}`, 
+    data: { id: product._id, status: product.status } 
+  });
 });
 
 module.exports = {

@@ -22,6 +22,7 @@
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -32,6 +33,7 @@
     "mongoose": "^9.1.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^7.0.12"
   },
   "devDependencies": {
