@@ -19,12 +19,15 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Mongoose duplicate key error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern)[0];
-    error.message = `${field} already exists`;
-    error.statusCode = 400;
-    console.log('❌ Duplicate key error:', field);
-  }
+if (err.code === 11000) {
+  const field = err.keyPattern
+    ? Object.keys(err.keyPattern)[0]
+    : 'field';
+
+  error.message = `${field} already exists`;
+  error.statusCode = 400;
+}
+
 
   // Mongoose cast error
   if (err.name === 'CastError') {

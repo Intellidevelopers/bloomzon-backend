@@ -116,6 +116,8 @@ const saveProductDetails = asyncHandler(async (req, res, next) => {
   });
 });
 
+
+
 const saveVariationTypes = asyncHandler(async (req, res, next) => {
   const { productId, variationTypes, colors, sizes, editions } = req.body;
   if (!productId) return next(new ErrorResponse('Product ID is required', 400));
@@ -140,6 +142,8 @@ const saveVariationTypes = asyncHandler(async (req, res, next) => {
   });
 });
 
+
+
 const saveProductVariations = asyncHandler(async (req, res, next) => {
   const { productId, variations } = req.body;
   const parsedVariations = typeof variations === 'string' ? JSON.parse(variations) : variations;
@@ -154,18 +158,32 @@ const saveProductVariations = asyncHandler(async (req, res, next) => {
   const uploadedFiles = req.files || [];
   await ProductVariation.deleteMany({ productId: product._id });
 
-  const variationDocs = parsedVariations.map((variation, index) => {
-    const imageFile = uploadedFiles.find(file => file.fieldname === `variation_${index}_image`) || uploadedFiles[index];
-    return {
-      productId: product._id, color: variation.color, size: variation.size, edition: variation.edition,
-      sku: variation.sku || `${product.productId}-${variation.color || ''}-${variation.size || ''}`.toUpperCase().replace(/\s/g, '-'),
-      productIdValue: variation.productIdValue || variation.productId, productIdType: variation.productIdType,
-      price: variation.price ? parseFloat(variation.price) : null,
-      quantity: variation.quantity ? parseInt(variation.quantity) : 0,
-      condition: variation.condition,
-      image: imageFile ? `/uploads/products/${imageFile.filename}` : variation.image || null
-    };
-  });
+const variationDocs = parsedVariations.map((variation, index) => {
+  const imageFile = req.files?.[index];
+
+  return {
+    productId: product._id,
+    color: variation.color,
+    size: variation.size,
+    edition: variation.edition,
+    sku:
+      variation.sku ||
+      `${product.productId}-${variation.color || ''}-${variation.size || ''}`
+        .toUpperCase()
+        .replace(/\s/g, '-'),
+
+    productIdValue: variation.productIdValue || variation.productId,
+    productIdType: variation.productIdType,
+    price: variation.price ? Number(variation.price) : null,
+    quantity: variation.quantity ? Number(variation.quantity) : 0,
+    condition: variation.condition,
+
+    image: imageFile
+      ? `/uploads/products/${imageFile.filename}`
+      : null,
+  };
+});
+
 
   const createdVariations = await ProductVariation.insertMany(variationDocs);
   product.currentStep = 3;
