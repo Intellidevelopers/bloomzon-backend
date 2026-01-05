@@ -24,9 +24,9 @@ const {
 // ============================================
 // PUBLIC ROUTES
 // ============================================
-router.get('/dropdown-data', getDropdownData);
-router.get('/', getAllProducts);
-router.get('/:id', getProductById);
+router.get('/dropdown-data', protect, getDropdownData);
+router.get('/', protect, getAllProducts);
+router.get('/:id', protect, getProductById);
 
 // ============================================
 // PROTECTED ROUTES (Requires Authentication)
