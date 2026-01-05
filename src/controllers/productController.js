@@ -411,6 +411,7 @@ const completeProductCreation = asyncHandler(async (req, res, next) => {
   });
 });
 
+// controllers/productController.js - UPDATED getAllProducts
 const getAllProducts = asyncHandler(async (req, res, next) => {
   const { status, category, search, page = 1, limit = 10, sortBy = 'createdAt', order = 'desc', sellerId } = req.query;
   const query = {};
@@ -432,14 +433,40 @@ const getAllProducts = asyncHandler(async (req, res, next) => {
   const sortOrder = order === 'desc' ? -1 : 1;
   const sortOptions = { [sortBy]: sortOrder };
 
-  const products = await Product.find(query).sort(sortOptions).limit(limitNum).skip(skip)
-    .populate('sellerId', 'name email').select('-__v').lean();
+  // Fetch products WITHOUT .lean() to enable virtuals
+  const products = await Product.find(query)
+    .sort(sortOptions)
+    .limit(limitNum)
+    .skip(skip)
+    .populate('sellerId', 'name email')
+    .populate({
+      path: 'images',
+      select: 'url cloudinaryId isPrimary order',
+      options: { sort: { order: 1 } }
+    })
+    .select('-__v');
+
+  // Convert to plain objects and add primaryImage field
+  const productsWithImages = products.map(product => {
+    const productObj = product.toObject();
+    
+    // Add primaryImage field (first image or primary marked image)
+    if (productObj.images && productObj.images.length > 0) {
+      const primaryImg = productObj.images.find(img => img.isPrimary) || productObj.images[0];
+      productObj.primaryImage = primaryImg.url;
+    } else {
+      productObj.primaryImage = null;
+    }
+    
+    return productObj;
+  });
+
   const total = await Product.countDocuments(query);
 
   res.status(200).json({
     success: true,
     data: {
-      products,
+      products: productsWithImages,
       pagination: {
         currentPage: pageNum, 
         totalPages: Math.ceil(total / limitNum), 
