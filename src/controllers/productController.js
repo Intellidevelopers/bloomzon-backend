@@ -411,13 +411,19 @@ const completeProductCreation = asyncHandler(async (req, res, next) => {
   });
 });
 
-// controllers/productController.js - UPDATED getAllProducts
+
+// controllers/productController.js - FIXED getAllProducts
 const getAllProducts = asyncHandler(async (req, res, next) => {
-  const { status, category, search, page = 1, limit = 10, sortBy = 'createdAt', order = 'desc', sellerId } = req.query;
-  const query = {};
+  const { status, category, search, page = 1, limit = 10, sortBy = 'createdAt', order = 'desc' } = req.query;
+  
+  // CRITICAL FIX: Always filter by the logged-in seller
+  const query = {
+    sellerId: req.user._id  // Only get products for this seller
+  };
+  
   if (status) query.status = status;
   if (category) query.productCategory = category;
-  if (sellerId) query.sellerId = sellerId;
+  
   if (search) {
     query.$or = [
       { productName: { $regex: search, $options: 'i' } },
