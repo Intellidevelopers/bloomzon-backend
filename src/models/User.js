@@ -36,6 +36,17 @@ const userSchema = new mongoose.Schema({
     minlength: [6, 'Password must be at least 6 characters'],
     select: false // Don't return password by default
   },
+
+    // Profile Image Fields
+  profileImage: {
+    type: String,
+    default: null  // URL or path to the profile image
+  },
+  profileImagePublicId: {
+    type: String,
+    default: null  // For cloud storage (e.g., Cloudinary public_id)
+  },
+  
   role: {
     type: String,
     enum: ['seller', 'admin', 'super_admin'],
