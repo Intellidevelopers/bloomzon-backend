@@ -10,9 +10,11 @@ const {
   forgotPasswordValidation,
   verifyResetOTPValidation,
   resetPasswordValidation,
-  selectCountryValidation  // Import this
-
+  selectCountryValidation
 } = require('../middlewares/validation');
+
+// Import the profile upload configuration from your existing cloudinary setup
+const { uploadProfile } = require('../config/cloudinary');
 
 // Public routes
 router.post('/signup', signupValidation, AuthController.signup);
@@ -27,7 +29,20 @@ router.post('/reset-password', resetPasswordValidation, AuthController.resetPass
 
 // Protected routes
 router.get('/me', protect, AuthController.getProfile);
-router.post('/select-country', protect, selectCountryValidation, AuthController.selectCountry);  // Add this
+router.post('/select-country', protect, selectCountryValidation, AuthController.selectCountry);
 
+// Profile Image routes - using uploadProfile for profile images
+router.post(
+  '/upload-profile-image',
+  protect,
+  uploadProfile.single('profileImage'), // 'profileImage' is the field name in FormData
+  AuthController.uploadProfileImage
+);
+
+router.delete(
+  '/delete-profile-image',
+  protect,
+  AuthController.deleteProfileImage
+);
 
 module.exports = router;

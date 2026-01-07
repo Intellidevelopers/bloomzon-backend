@@ -2,6 +2,9 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const OTPService = require('../services/otpService');
 const emailService = require('../services/emailService');
+const path = require('path');
+const { deleteFromCloudinary, getPublicIdFromUrl } = require('../config/cloudinary');
+
 
 class AuthController {
   /**
@@ -799,6 +802,173 @@ class AuthController {
       });
     }
   }
+
+  /**
+ * Upload/Update Profile Image (Cloudinary)
+ * POST /api/v1/auth/upload-profile-image
+ */
+static async uploadProfileImage(req, res) {
+  console.log('\n========== UPLOAD PROFILE IMAGE REQUEST ==========');
+  console.log('👤 User ID:', req.user.id);
+  
+  try {
+    // Check if file was uploaded
+    if (!req.file) {
+      console.log('❌ No file uploaded');
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload an image file'
+      });
+    }
+
+    console.log('📁 File uploaded to Cloudinary');
+    console.log('🔗 Image URL:', req.file.path);
+    console.log('🆔 Public ID:', req.file.filename);
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      console.log('❌ User not found');
+      // Delete the uploaded file since user not found
+      try {
+        await deleteFromCloudinary(req.file.filename);
+      } catch (deleteError) {
+        console.error('Error cleaning up uploaded file:', deleteError);
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Delete old profile image from Cloudinary if exists
+    if (user.profileImagePublicId) {
+      console.log('🗑️ Deleting old profile image:', user.profileImagePublicId);
+      try {
+        await deleteFromCloudinary(user.profileImagePublicId);
+        console.log('✅ Old profile image deleted');
+      } catch (deleteError) {
+        console.error('⚠️ Failed to delete old image:', deleteError.message);
+        // Continue even if delete fails - the old image will be orphaned
+      }
+    }
+
+    // Update user with new profile image
+    user.profileImage = req.file.path; // Cloudinary URL
+    user.profileImagePublicId = req.file.filename; // Cloudinary public_id
+    await user.save();
+
+    console.log('✅ Profile image updated successfully');
+    console.log('========== UPLOAD PROFILE IMAGE SUCCESS ==========\n');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image uploaded successfully',
+      data: {
+        profileImage: user.profileImage,
+        profileImagePublicId: user.profileImagePublicId
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ UPLOAD PROFILE IMAGE ERROR:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Clean up uploaded file if there was an error
+    if (req.file && req.file.filename) {
+      try {
+        await deleteFromCloudinary(req.file.filename);
+        console.log('🧹 Cleaned up uploaded file after error');
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
+      }
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile image',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+}
+
+/**
+ * Delete Profile Image
+ * DELETE /api/v1/auth/delete-profile-image
+ */
+static async deleteProfileImage(req, res) {
+  console.log('\n========== DELETE PROFILE IMAGE REQUEST ==========');
+  console.log('👤 User ID:', req.user.id);
+  
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      console.log('❌ User not found');
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.profileImage) {
+      console.log('⚠️ No profile image to delete');
+      return res.status(400).json({
+        success: false,
+        message: 'No profile image to delete'
+      });
+    }
+
+    // Delete from Cloudinary
+    if (user.profileImagePublicId) {
+      console.log('🗑️ Deleting from Cloudinary:', user.profileImagePublicId);
+      try {
+        const result = await deleteFromCloudinary(user.profileImagePublicId);
+        console.log('✅ Deleted from Cloudinary:', result);
+      } catch (deleteError) {
+        console.error('⚠️ Failed to delete from Cloudinary:', deleteError.message);
+        // Continue to clear database fields even if Cloudinary delete fails
+      }
+    } else if (user.profileImage) {
+      // Fallback: try to extract public_id from URL if profileImagePublicId is missing
+      console.log('⚠️ profileImagePublicId missing, extracting from URL');
+      const publicId = getPublicIdFromUrl(user.profileImage);
+      if (publicId) {
+        console.log('🗑️ Extracted public_id:', publicId);
+        try {
+          await deleteFromCloudinary(publicId);
+          console.log('✅ Deleted from Cloudinary using extracted ID');
+        } catch (deleteError) {
+          console.error('⚠️ Failed to delete using extracted ID:', deleteError.message);
+        }
+      }
+    }
+
+    // Clear profile image fields in database
+    user.profileImage = null;
+    user.profileImagePublicId = null;
+    await user.save();
+
+    console.log('✅ Profile image deleted successfully');
+    console.log('========== DELETE PROFILE IMAGE SUCCESS ==========\n');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ DELETE PROFILE IMAGE ERROR:', error);
+    console.error('Error stack:', error.stack);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete profile image',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+}
+
 }
 
 module.exports = AuthController;
